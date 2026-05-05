@@ -6,7 +6,7 @@ import {
   cleanJSONSchemaForAntigravity,
 } from "../helpers/geminiHelper.ts";
 import { buildGeminiTools, sanitizeGeminiToolName } from "../helpers/geminiToolsSanitizer.ts";
-import { capMaxOutputTokens } from "../../../src/lib/modelCapabilities.ts";
+import { capMaxOutputTokens, capThinkingBudget } from "../../../src/lib/modelCapabilities.ts";
 import { resolveGeminiThoughtSignature } from "../../services/geminiThoughtSignatureStore.ts";
 
 function extractClaudeThoughtSignature(block: unknown): string | null {
@@ -231,10 +231,13 @@ export function claudeToGeminiRequest(model, body, stream) {
   if (model.startsWith("gemma-4")) {
     // gemma-4 models returns - 400: Thinking budget is not supported for this model
   } else if (body.thinking?.type === "enabled" && body.thinking.budget_tokens) {
-    result.generationConfig.thinkingConfig = {
-      thinkingBudget: body.thinking.budget_tokens,
-      includeThoughts: true,
-    };
+    const cappedBudget = capThinkingBudget(model, Number(body.thinking.budget_tokens));
+    if (cappedBudget > 0) {
+      result.generationConfig.thinkingConfig = {
+        thinkingBudget: cappedBudget,
+        includeThoughts: true,
+      };
+    }
   } else if (typeof body.output_config?.effort === "string") {
     const effort = body.output_config.effort.toLowerCase();
     const effortBudgetMap: Record<string, number> = {
@@ -247,10 +250,13 @@ export function claudeToGeminiRequest(model, body, stream) {
     };
     const budget = effortBudgetMap[effort];
     if (budget !== undefined && budget > 0) {
-      result.generationConfig.thinkingConfig = {
-        thinkingBudget: budget,
-        includeThoughts: true,
-      };
+      const cappedBudget = capThinkingBudget(model, budget);
+      if (cappedBudget > 0) {
+        result.generationConfig.thinkingConfig = {
+          thinkingBudget: cappedBudget,
+          includeThoughts: true,
+        };
+      }
     }
   }
 

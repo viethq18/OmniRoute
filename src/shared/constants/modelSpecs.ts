@@ -42,7 +42,7 @@ export const MODEL_SPECS: Record<string, ModelSpec> = {
     maxOutputTokens: 65536,
     contextWindow: 1048576,
     defaultThinkingBudget: 8192,
-    thinkingBudgetCap: 32768,
+    thinkingBudgetCap: 24576,
     supportsThinking: true,
     supportsTools: true,
     supportsVision: true,
