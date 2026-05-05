@@ -93,6 +93,7 @@ export function geminiToClaudeResponse(chunk, state) {
             id: toolId,
             name: restoredToolName,
             input: {},
+            thought_signature: part.thoughtSignature || part.thought_signature || undefined,
           },
         });
 
