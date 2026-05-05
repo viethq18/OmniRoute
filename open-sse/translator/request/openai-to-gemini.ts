@@ -230,8 +230,6 @@ function openaiToGeminiBase(model, body, stream, toolNameOptions: GeminiToolName
             .map((tc) => resolveGeminiThoughtSignature(tc.id, extractClientThoughtSignature(tc)))
             .find((signature) => typeof signature === "string" && signature.length > 0);
 
-          let shouldUseEmbeddedSignature = !parts.some((p) => p.thoughtSignature);
-
           for (const tc of msg.tool_calls) {
             if (tc.type !== "function") continue;
 
@@ -240,13 +238,10 @@ function openaiToGeminiBase(model, body, stream, toolNameOptions: GeminiToolName
               tc.id,
               extractClientThoughtSignature(tc)
             );
-            const embeddedThoughtSignature = shouldUseEmbeddedSignature
-              ? firstPersistedSignature || signatureForToolCall
-              : undefined;
-
-            if (embeddedThoughtSignature) {
-              shouldUseEmbeddedSignature = false;
-            }
+            // Gemini now requires thought_signature on every functionCall part.
+            // Prefer the per-tool-call persisted signature; fall back to the first
+            // resolved signature in the same assistant turn for multi-call batches.
+            const embeddedThoughtSignature = signatureForToolCall || firstPersistedSignature;
 
             // Gemini expects the signature on the functionCall part itself.
             parts.push({

@@ -5,9 +5,19 @@ import {
   tryParseJSON,
   cleanJSONSchemaForAntigravity,
 } from "../helpers/geminiHelper.ts";
-import { DEFAULT_THINKING_GEMINI_SIGNATURE } from "../../config/defaultThinkingSignature.ts";
 import { buildGeminiTools, sanitizeGeminiToolName } from "../helpers/geminiToolsSanitizer.ts";
 import { capMaxOutputTokens } from "../../../src/lib/modelCapabilities.ts";
+import { resolveGeminiThoughtSignature } from "../../services/geminiThoughtSignatureStore.ts";
+
+function extractClaudeThoughtSignature(block: unknown): string | null {
+  if (!block || typeof block !== "object") return null;
+  const value = block as Record<string, unknown>;
+  const candidates = [value.thoughtSignature, value.thought_signature, value.signature];
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.length > 0) return candidate;
+  }
+  return null;
+}
 
 /**
  * Direct Claude → Gemini request translator.
@@ -87,8 +97,30 @@ export function claudeToGeminiRequest(model, body, stream) {
   if (body.messages && Array.isArray(body.messages)) {
     for (const msg of body.messages) {
       const parts = [];
+      const toolUseClientSignatures = new Map<string, string | null>();
+      let firstPersistedToolSignature: string | null = null;
 
       if (Array.isArray(msg.content)) {
+        let latestThinkingSignature: string | null = null;
+
+        for (const block of msg.content) {
+          if (block.type === "thinking") {
+            const signature = extractClaudeThoughtSignature(block);
+            if (signature) {
+              latestThinkingSignature = signature;
+            }
+            continue;
+          }
+          if (block.type !== "tool_use") continue;
+          const candidateSignature =
+            extractClaudeThoughtSignature(block) || latestThinkingSignature;
+          toolUseClientSignatures.set(block.id, candidateSignature);
+          const resolved = resolveGeminiThoughtSignature(block.id, candidateSignature);
+          if (!firstPersistedToolSignature && resolved) {
+            firstPersistedToolSignature = resolved;
+          }
+        }
+
         for (const block of msg.content) {
           switch (block.type) {
             case "text":
@@ -98,12 +130,29 @@ export function claudeToGeminiRequest(model, body, stream) {
             case "thinking":
               // Preserve thinking blocks as thought parts
               if (block.thinking) {
-                parts.push({ thought: true, text: block.thinking });
+                const signature = extractClaudeThoughtSignature(block);
+                parts.push({
+                  ...(signature ? { thoughtSignature: signature } : {}),
+                  thought: true,
+                  text: block.thinking,
+                });
               }
               break;
 
-            case "tool_use":
+            case "tool_use": {
+              const signatureForToolCall = resolveGeminiThoughtSignature(
+                block.id,
+                toolUseClientSignatures.get(block.id)
+              );
+              const embeddedThoughtSignature =
+                signatureForToolCall || firstPersistedToolSignature || undefined;
+
               parts.push({
+                ...(embeddedThoughtSignature
+                  ? {
+                      thoughtSignature: embeddedThoughtSignature,
+                    }
+                  : {}),
                 functionCall: {
                   id: block.id,
                   name: sanitizeToolName(block.name),
@@ -111,6 +160,7 @@ export function claudeToGeminiRequest(model, body, stream) {
                 },
               });
               break;
+            }
 
             case "tool_result": {
               let content = block.content;

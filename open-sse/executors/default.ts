@@ -383,11 +383,25 @@ export class DefaultExecutor extends BaseExecutor {
     let withDefaults = applyProviderRequestDefaults(cleanedBody, this.config.requestDefaults);
 
     if (typeof withDefaults === "object" && withDefaults !== null && !Array.isArray(withDefaults)) {
-      if (this.provider?.startsWith?.("anthropic-compatible-")) {
-        if (Object.prototype.hasOwnProperty.call(withDefaults, "stream_options")) {
-          const withoutStreamOptions = { ...withDefaults } as Record<string, unknown>;
-          delete withoutStreamOptions.stream_options;
-          withDefaults = withoutStreamOptions;
+      const isAnthropicTarget =
+        this.provider === "claude" ||
+        this.provider === "anthropic" ||
+        this.provider?.startsWith?.("anthropic-compatible-");
+      if (isAnthropicTarget) {
+        const sanitizedBody = { ...withDefaults } as Record<string, unknown>;
+        let changed = false;
+        if (Object.prototype.hasOwnProperty.call(sanitizedBody, "stream_options")) {
+          delete sanitizedBody.stream_options;
+          changed = true;
+        }
+        // Some Anthropic gateways reject this field with:
+        // "[400]: context_management: Extra inputs are not permitted".
+        if (Object.prototype.hasOwnProperty.call(sanitizedBody, "context_management")) {
+          delete sanitizedBody.context_management;
+          changed = true;
+        }
+        if (changed) {
+          withDefaults = sanitizedBody;
         }
       } else if (
         stream &&

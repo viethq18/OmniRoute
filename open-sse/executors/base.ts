@@ -577,10 +577,11 @@ export class BaseExecutor {
             tb.thinking = { type: "adaptive" };
           }
 
-          if (supportsAdaptiveThinking && !tb.context_management && !clientExplicitThinking) {
-            tb.context_management = {
-              edits: [{ type: "clear_thinking_20251015", keep: "all" }],
-            };
+          // Anthropic can reject `context_management` on some Claude Code flows with:
+          // "[400]: context_management: Extra inputs are not permitted".
+          // Keep Claude Code compatibility by always omitting this field.
+          if (tb.context_management !== undefined) {
+            delete tb.context_management;
           }
 
           if (supportsAdaptiveThinking && !tb.output_config && !clientExplicitEffort) {

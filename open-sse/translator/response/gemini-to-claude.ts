@@ -1,5 +1,6 @@
 import { register } from "../registry.ts";
 import { FORMATS } from "../formats.ts";
+import { storeGeminiThoughtSignature } from "../../services/geminiThoughtSignatureStore.ts";
 
 /**
  * Direct Gemini → Claude response translator.
@@ -49,6 +50,9 @@ export function geminiToClaudeResponse(chunk, state) {
     for (const part of content.parts) {
       const hasThoughtSig = part.thoughtSignature || part.thought_signature;
       const isThought = part.thought === true;
+      if (typeof hasThoughtSig === "string" && hasThoughtSig.length > 0) {
+        state.pendingThoughtSignature = hasThoughtSig;
+      }
 
       // Thinking content → thinking block (always open+close per chunk)
       if (isThought && part.text) {
@@ -84,6 +88,10 @@ export function geminiToClaudeResponse(chunk, state) {
         const restoredToolName = state.toolNameMap?.get(rawToolName) || rawToolName;
         const idx = state.contentBlockIndex++;
         const toolId = fc.id || `toolu_${Date.now()}_${idx}`;
+        if (state.pendingThoughtSignature) {
+          storeGeminiThoughtSignature(toolId, state.pendingThoughtSignature);
+          state.pendingThoughtSignature = null;
+        }
 
         results.push({
           type: "content_block_start",
