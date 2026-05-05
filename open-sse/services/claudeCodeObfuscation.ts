@@ -53,6 +53,16 @@ export function obfuscateSensitiveWords(text: string): string {
   return result;
 }
 
+function hasSignedThinkingBlock(content: unknown): boolean {
+  if (!Array.isArray(content)) return false;
+  return content.some((block) => {
+    if (!block || typeof block !== "object" || Array.isArray(block)) return false;
+    const record = block as Record<string, unknown>;
+    if (record.type !== "thinking" && record.type !== "redacted_thinking") return false;
+    return typeof record.signature === "string" && record.signature.length > 0;
+  });
+}
+
 export function obfuscateInBody(body: Record<string, unknown>): void {
   // System prompt (Claude format: string or array of blocks)
   if (typeof body.system === "string") {
@@ -73,6 +83,7 @@ export function obfuscateInBody(body: Record<string, unknown>): void {
       if (typeof content === "string") {
         msg.content = obfuscateSensitiveWords(content);
       } else if (Array.isArray(content)) {
+        if (hasSignedThinkingBlock(content)) continue;
         for (const block of content as Array<Record<string, unknown>>) {
           if (typeof block.text === "string") {
             block.text = obfuscateSensitiveWords(block.text);

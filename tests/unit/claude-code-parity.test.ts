@@ -24,6 +24,7 @@ import {
 
 // ── Tool remapper ─────────────────────────────────────────────────────────────
 import { remapToolNamesInRequest } from "../../open-sse/services/claudeCodeToolRemapper.ts";
+import { obfuscateInBody } from "../../open-sse/services/claudeCodeObfuscation.ts";
 
 // ── Constraints ───────────────────────────────────────────────────────────────
 import {
@@ -169,7 +170,53 @@ describe("remapToolNamesInRequest", () => {
     const body = { messages: [{ role: "user", content: "hello" }] };
     assert.doesNotThrow(() => remapToolNamesInRequest(body));
   });
+
+  it("preserves signed thinking assistant blocks without remapping tool_use names", () => {
+    const body = {
+      tools: [{ name: "bash", description: "Run bash commands" }],
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "trace", signature: "sig-123" },
+            { type: "tool_use", id: "toolu_1", name: "bash", input: {} },
+          ],
+        },
+      ],
+    };
+
+    remapToolNamesInRequest(body);
+
+    assert.equal(body.tools[0].name, "Bash");
+    assert.equal(body.messages[0].content[1].name, "bash");
+  });
   // Note: remapToolNamesInRequest requires a non-null body (callers always provide one)
+});
+
+describe("obfuscateInBody", () => {
+  it("does not mutate assistant turns with signed thinking blocks", () => {
+    const body = {
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "trace", signature: "sig-123" },
+            { type: "text", text: "cursor" },
+          ],
+        },
+        {
+          role: "user",
+          content: [{ type: "text", text: "cursor" }],
+        },
+      ],
+    };
+
+    obfuscateInBody(body);
+
+    assert.equal(body.messages[0].content[1].text, "cursor");
+    assert.notEqual(body.messages[1].content[0].text, "cursor");
+    assert.ok(String(body.messages[1].content[0].text).includes("\u200d"));
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
