@@ -252,6 +252,22 @@ test("Claude -> Gemini maps output_config.effort to thinkingConfig when thinking
   }
 });
 
+test("Claude -> Gemini caps thinking budget for provider-prefixed Gemini model IDs", () => {
+  const result = claudeToGeminiRequest(
+    "gemini/gemini-2.5-flash",
+    {
+      messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      output_config: { effort: "high" },
+    },
+    false
+  );
+
+  assert.deepEqual(result.generationConfig.thinkingConfig, {
+    thinkingBudget: 24576,
+    includeThoughts: true,
+  });
+});
+
 test("Claude -> Gemini caps explicit thinking.budget_tokens by model limit", () => {
   const result = claudeToGeminiRequest(
     "gemini-2.5-pro",
