@@ -375,10 +375,13 @@ export function openaiToGeminiCLIRequest(
 
   // Thinking config from Claude format
   if (body.thinking?.type === "enabled" && body.thinking.budget_tokens) {
-    gemini.generationConfig.thinkingConfig = {
-      thinkingBudget: body.thinking.budget_tokens,
-      includeThoughts: true,
-    };
+    const cappedBudget = capThinkingBudget(model, Number(body.thinking.budget_tokens));
+    if (cappedBudget > 0) {
+      gemini.generationConfig.thinkingConfig = {
+        thinkingBudget: cappedBudget,
+        includeThoughts: true,
+      };
+    }
   }
 
   return gemini;

@@ -42,7 +42,7 @@ export const MODEL_SPECS: Record<string, ModelSpec> = {
     maxOutputTokens: 65536,
     contextWindow: 1048576,
     defaultThinkingBudget: 8192,
-    thinkingBudgetCap: 32768,
+    thinkingBudgetCap: 24576,
     supportsThinking: true,
     supportsTools: true,
     supportsVision: true,
@@ -117,19 +117,41 @@ export const MODEL_SPECS: Record<string, ModelSpec> = {
   },
 };
 
-export function getModelSpec(modelId: string): ModelSpec | undefined {
+function findModelSpec(modelId: string): ModelSpec | undefined {
   if (MODEL_SPECS[modelId]) return MODEL_SPECS[modelId];
 
-  // Buscas por alias
-  for (const [canonical, spec] of Object.entries(MODEL_SPECS)) {
+  for (const [, spec] of Object.entries(MODEL_SPECS)) {
     if (spec.aliases?.includes(modelId)) return spec;
   }
 
-  // Prefix matching
   for (const [key, spec] of Object.entries(MODEL_SPECS)) {
     if (key !== "__default__" && modelId.startsWith(key)) return spec;
   }
 
+  return undefined;
+}
+
+function getModelLookupCandidates(modelId: string): string[] {
+  if (!modelId) return [];
+  const normalized = modelId.endsWith("[1m]") ? modelId.slice(0, -4) : modelId;
+  const candidates = new Set<string>([normalized]);
+
+  const parts = normalized.split("/");
+  if (parts.length > 1) {
+    for (let i = 1; i < parts.length; i += 1) {
+      const suffix = parts.slice(i).join("/");
+      if (suffix) candidates.add(suffix);
+    }
+  }
+
+  return [...candidates];
+}
+
+export function getModelSpec(modelId: string): ModelSpec | undefined {
+  for (const candidate of getModelLookupCandidates(modelId)) {
+    const spec = findModelSpec(candidate);
+    if (spec) return spec;
+  }
   return undefined;
 }
 

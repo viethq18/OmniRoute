@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 const { claudeToGeminiRequest } =
   await import("../../open-sse/translator/request/claude-to-gemini.ts");
+const { capMaxOutputTokens, capThinkingBudget } =
+  await import("../../src/lib/modelCapabilities.ts");
 const { DEFAULT_SAFETY_SETTINGS } =
   await import("../../open-sse/translator/helpers/geminiHelper.ts");
 
@@ -116,7 +118,7 @@ test("Claude -> Gemini clamps maxOutputTokens to the model cap", () => {
     false
   );
 
-  assert.equal(result.generationConfig.maxOutputTokens, 8192);
+  assert.equal(result.generationConfig.maxOutputTokens, capMaxOutputTokens("gemini-2.5-flash"));
 });
 
 test("Claude -> Gemini converts text and base64 images to Gemini parts", () => {
@@ -224,15 +226,15 @@ test("Claude -> Gemini handles empty bodies without producing invalid content", 
 });
 
 test("Claude -> Gemini maps output_config.effort to thinkingConfig when thinking absent", () => {
-  const cases: Array<{ effort: string; expected: number }> = [
-    { effort: "low", expected: 1024 },
-    { effort: "medium", expected: 10240 },
-    { effort: "high", expected: 32768 },
-    { effort: "max", expected: 131072 },
-    { effort: "xhigh", expected: 131072 },
+  const cases: Array<{ effort: string; expectedRawBudget: number }> = [
+    { effort: "low", expectedRawBudget: 1024 },
+    { effort: "medium", expectedRawBudget: 10240 },
+    { effort: "high", expectedRawBudget: 32768 },
+    { effort: "max", expectedRawBudget: 131072 },
+    { effort: "xhigh", expectedRawBudget: 131072 },
   ];
 
-  for (const { effort, expected } of cases) {
+  for (const { effort, expectedRawBudget } of cases) {
     const result = claudeToGeminiRequest(
       "gemini-2.5-pro",
       {
@@ -241,12 +243,45 @@ test("Claude -> Gemini maps output_config.effort to thinkingConfig when thinking
       },
       false
     );
+    const expected = capThinkingBudget("gemini-2.5-pro", expectedRawBudget);
     assert.deepEqual(
       result.generationConfig.thinkingConfig,
       { thinkingBudget: expected, includeThoughts: true },
       `effort ${effort} should map to budget ${expected}`
     );
   }
+});
+
+test("Claude -> Gemini caps thinking budget for provider-prefixed Gemini model IDs", () => {
+  const result = claudeToGeminiRequest(
+    "gemini/gemini-2.5-flash",
+    {
+      messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      output_config: { effort: "high" },
+    },
+    false
+  );
+
+  assert.deepEqual(result.generationConfig.thinkingConfig, {
+    thinkingBudget: 24576,
+    includeThoughts: true,
+  });
+});
+
+test("Claude -> Gemini caps explicit thinking.budget_tokens by model limit", () => {
+  const result = claudeToGeminiRequest(
+    "gemini-2.5-pro",
+    {
+      messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      thinking: { type: "enabled", budget_tokens: 32768 },
+    },
+    false
+  );
+
+  assert.deepEqual(result.generationConfig.thinkingConfig, {
+    thinkingBudget: capThinkingBudget("gemini-2.5-pro", 32768),
+    includeThoughts: true,
+  });
 });
 
 test("Claude -> Gemini prefers thinking.budget_tokens over output_config.effort", () => {

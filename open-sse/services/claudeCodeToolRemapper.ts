@@ -38,6 +38,16 @@ for (const [k, v] of Object.entries(TOOL_RENAME_MAP)) {
   REVERSE_MAP[v] = k;
 }
 
+function hasSignedThinkingBlock(content: unknown): boolean {
+  if (!Array.isArray(content)) return false;
+  return content.some((block) => {
+    if (!block || typeof block !== "object" || Array.isArray(block)) return false;
+    const record = block as Record<string, unknown>;
+    if (record.type !== "thinking" && record.type !== "redacted_thinking") return false;
+    return typeof record.signature === "string" && record.signature.length > 0;
+  });
+}
+
 export function remapToolNamesInRequest(body: Record<string, unknown>): boolean {
   let hasLowercase = false;
   let hasTitleCase = false;
@@ -62,6 +72,7 @@ export function remapToolNamesInRequest(body: Record<string, unknown>): boolean 
     for (const msg of messages) {
       const content = msg.content as Array<Record<string, unknown>> | undefined;
       if (!Array.isArray(content)) continue;
+      if (hasSignedThinkingBlock(content)) continue;
       for (const block of content) {
         if (block.type === "tool_use" && typeof block.name === "string") {
           const mapped = TOOL_RENAME_MAP[block.name];

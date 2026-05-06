@@ -574,6 +574,22 @@ test("OpenAI -> Gemini CLI emits native Cloud Code functionResponse output", () 
   });
 });
 
+test("OpenAI -> Gemini CLI caps explicit Claude-style thinking budget to model limit", () => {
+  const result = openaiToGeminiCLIRequest(
+    "gemini-2.5-pro",
+    {
+      messages: [{ role: "user", content: "Hello" }],
+      thinking: { type: "enabled", budget_tokens: 32768 },
+    },
+    false
+  ) as any;
+
+  assert.deepEqual(result.generationConfig.thinkingConfig, {
+    thinkingBudget: 24576,
+    includeThoughts: true,
+  });
+});
+
 test("OpenAI -> Antigravity wraps Gemini requests in a Cloud Code envelope", () => {
   const result = openaiToAntigravityRequest(
     "gemini-2.5-pro",
