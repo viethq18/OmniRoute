@@ -2147,6 +2147,16 @@ export async function handleChatCore({
     payload: Record<string, unknown>,
     options?: { preserveToolResultBlocks?: boolean }
   ) => {
+    const hasSignedThinkingBlock = (content: unknown) =>
+      Array.isArray(content) &&
+      content.some((block) => {
+        if (!block || typeof block !== "object") return false;
+        const blockType = (block as ClaudeContentBlock).type;
+        if (blockType !== "thinking" && blockType !== "redacted_thinking") return false;
+        const signature = (block as ClaudeContentBlock).signature;
+        return typeof signature === "string" && signature.length > 0;
+      });
+
     const preserveToolResultBlocks = options?.preserveToolResultBlocks === true;
     if (!Array.isArray(payload.messages)) return;
     let messages = payload.messages as ClaudeMessage[];
@@ -2182,6 +2192,7 @@ export async function handleChatCore({
 
     // Anthropic rejects empty text blocks in native Messages payloads.
     for (const msg of messages) {
+      if (hasSignedThinkingBlock(msg.content)) continue;
       if (Array.isArray(msg.content)) {
         msg.content = msg.content.filter(
           (block: ClaudeContentBlock) =>
